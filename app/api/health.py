@@ -4,10 +4,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
-from ...core.database import get_db
-from ...core.config import settings
-from ...utils.websocket_manager import ws_manager
-from ...schemas.health import HealthResponse
+from app.core.database import get_db
+from app.core.config import settings
+from app.utils.websocket_manager import ws_manager
+from app.schemas.health import HealthResponse
 
 router = APIRouter(tags=["health"])
 
@@ -30,7 +30,7 @@ def health_detailed(
 ):
     """
         Детальная проверка состояния сервиса
-        Возвращает статус каждого компонента
+        Возвращает статус каждого компонента (database, redis, websocket)
     """
     result = {"status": "healthy", "checks": {}}
 
