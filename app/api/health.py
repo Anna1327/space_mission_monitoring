@@ -22,7 +22,16 @@ def get_redis():
     status_code=status.HTTP_200_OK,
     responses={
         503: {"description": "Service unhealthy (database or redis down)"}
-    }
+    },
+    summary="Детальная проверка здоровья",
+    description="""
+    Проверяет состояние всех компонентов системы:
+    - **database** — подключение к PostgreSQL
+    - **redis** — доступность Redis
+    - **websocket** — количество активных соединений
+
+    Если хотя бы один компонент не работает, возвращает HTTP 503.
+    """
 )
 def health_detailed(
         db: Session = Depends(get_db),

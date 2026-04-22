@@ -31,6 +31,10 @@ def root():
     }
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Быстрая проверка здоровья",
+    description="Возвращает базовый статус сервиса. Используется для балансировщиков и оркестраторов."
+)
 def health():
     return {"status": "healthy"}
