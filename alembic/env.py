@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 from app.core.database import Base
-from app.models import client, system, event
+from app.models import client, system, event, sensor
 from app.core.config import settings
 
 from alembic import context
