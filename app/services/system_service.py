@@ -7,8 +7,28 @@ class SystemService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_all(self, skip: int = 0, limit: int = 100):
-        return self.db.query(System).offset(skip).limit(limit).all()
+    def get_all(
+            self,
+            skip: int = 0,
+            limit: int = 100,
+            sort_by: str = "id",
+            order: str = "asc",
+            status_filter=None
+    ):
+        query = self.db.query(System)
+
+        # Фильтр по статусу
+        if status_filter:
+            query = query.filter(System.status == status_filter)
+
+        # Сортировка
+        if order == "asc":
+            query = query.order_by(getattr(System, sort_by).asc())
+        else:
+            query = query.order_by(getattr(System, sort_by).desc())
+
+        # Пагинация
+        return query.offset(skip).limit(limit).all()
 
     def get_by_id(self, system_id: int):
         return self.db.query(System).filter(System.id == system_id).first()
