@@ -25,3 +25,8 @@ class SystemResponse(SystemBase):
 
     class Config:
         from_attributes = True
+
+
+class EventTriggerResponse(BaseModel):
+    status: str
+    event: dict[str, Any]
