@@ -1,4 +1,5 @@
-from fastapi import status, APIRouter, Depends, HTTPException
+from fastapi import status, APIRouter, Depends, HTTPException, Query, Request
+from app.core.limiter import limiter
 from sqlalchemy.orm import Session
 from typing import List
 from ...core.database import get_db
@@ -15,17 +16,55 @@ router = APIRouter(prefix="/systems", tags=["systems"])
     status_code=status.HTTP_200_OK,
     responses={
         401: {"description": "Missing or invalid token"},
+    },
+    summary="Получить список систем",
+    description="""
+    Возвращает список всех систем с поддержкой пагинации, сортировки и фильтрации.
+
+    **Параметры пагинации:**
+    - `skip` — сколько пропустить
+    - `limit` — сколько взять (максимум 1000)
+
+    **Сортировка:**
+    - `sort_by` — поле для сортировки (id, name, status, created_at)
+    - `order` — направление (asc, desc)
+
+    **Фильтрация:**
+    - `status_filter` — фильтр по статусу (active, warning, failed)
+
+    **Примеры запросов:**
+    - `/systems?skip=10&limit=5` — вторая страница из 5 элементов
+    - `/systems?sort_by=name&order=desc` — сортировка по имени (убывание)
+    - `/systems?status_filter=active` — только активные системы
+    """,
+    openapi_extra={
+        "x-code-samples": [
+            {
+                "lang": "curl",
+                "source": "curl -X GET 'http://localhost:8000/api/v1/systems?skip=10&limit=5' -H 'Authorization: "
+                          "Bearer <token>'"
+            }
+        ]
     }
 )
 def get_systems(
-        skip: int = 0,
-        limit: int = 100,
-        db: Session = Depends(get_db),
-        _=Depends(get_current_client)
+    skip: int = Query(0, ge=0, description="Сколько пропустить", example=10),
+    limit: int = Query(100, ge=1, le=1000, description="Сколько взять (max 1000)", example=50),
+    sort_by: str = Query("id", description="Поле для сортировки (id, name, status, created_at)", example="created_at"),
+    order: str = Query("asc", description="Порядок сортировки (asc, desc)", example="desc"),
+    status_filter: str = Query(None, description="Фильтр по статусу (active, warning, failed)", example="active"),
+    db: Session = Depends(get_db),
+    _=Depends(get_current_client)
 ):
-    """Получить список всех систем (с пагинацией)"""
+    """Получить список всех систем (с пагинацией, сортировкой и фильтрацией)"""
     service = SystemService(db)
-    return service.get_all(skip=skip, limit=limit)
+    return service.get_all(
+        skip=skip,
+        limit=limit,
+        sort_by=sort_by,
+        order=order,
+        status_filter=status_filter
+    )
 
 
 @router.get(
@@ -35,7 +74,9 @@ def get_systems(
     responses={
         401: {"description": "Missing or invalid token"},
         404: {"description": "System not found"},
-    }
+    },
+    summary="Получить систему по ID",
+    description="Возвращает полную информацию о системе по её идентификатору."
 )
 def get_system(
         system_id: int,
@@ -60,9 +101,25 @@ def get_system(
     responses={
         400: {"description": "Bad request: name and system_type are required"},
         401: {"description": "Missing or invalid token"},
+    },
+    summary="Создать новую систему",
+    description="Создаёт новую систему (двигатель, жизнеобеспечение, связь).",
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "name": "Starship Enterprise",
+                        "system_type": "engine"
+                    }
+                }
+            }
+        }
     }
 )
+@limiter.limit("5/minute")
 def create_system(
+        request: Request,
         data: SystemCreate,
         db: Session = Depends(get_db),
         _=Depends(get_current_client)
@@ -85,9 +142,22 @@ def create_system(
         400: {"description": "Invalid event type or missing data"},
         401: {"description": "Missing or invalid token"},
         404: {"description": "System not found"},
-    }
+    },
+    summary="Симулировать событие системы",
+    description="""
+    Симулирует событие на системе.
+
+    **Поддерживаемые типы событий:**
+    - `failure` — отказ системы (статус → failed)
+    - `warning` — предупреждение (статус → warning)
+    - `recover` — восстановление (статус → active)
+
+    **Примеры:**
+    - `/systems/1/trigger/failure` — отказ системы №1
+    - `/systems/2/trigger/recover` — восстановление системы №2
+    """
 )
-def trigger_event(
+async def trigger_event(
         system_id: int,
         event_type: str,
         db: Session = Depends(get_db),
@@ -133,5 +203,7 @@ def trigger_event(
     }
     service.add_event(system_id, event_data)
 
-    # TODO: broadcast via WebSocket
+    # broadcast via WebSocket
+    from ...utils.websocket_manager import ws_manager
+    await ws_manager.broadcast_to_system(system_id, event_data)
     return {"status": "triggered", "event": event_data}
