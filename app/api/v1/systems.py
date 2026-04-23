@@ -154,7 +154,7 @@ def create_system(
     - `/systems/2/trigger/recover` — восстановление системы №2
     """
 )
-def trigger_event(
+async def trigger_event(
         system_id: int,
         event_type: str,
         db: Session = Depends(get_db),
@@ -200,5 +200,7 @@ def trigger_event(
     }
     service.add_event(system_id, event_data)
 
-    # TODO: broadcast via WebSocket
+    # broadcast via WebSocket
+    from ...utils.websocket_manager import ws_manager
+    await ws_manager.broadcast_to_system(system_id, event_data)
     return {"status": "triggered", "event": event_data}
