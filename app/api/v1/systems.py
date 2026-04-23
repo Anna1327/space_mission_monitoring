@@ -1,4 +1,5 @@
-from fastapi import status, APIRouter, Depends, HTTPException, Query
+from fastapi import status, APIRouter, Depends, HTTPException, Query, Request
+from app.core.limiter import limiter
 from sqlalchemy.orm import Session
 from typing import List
 from ...core.database import get_db
@@ -116,7 +117,9 @@ def get_system(
         }
     }
 )
+@limiter.limit("5/minute")
 def create_system(
+        request: Request,
         data: SystemCreate,
         db: Session = Depends(get_db),
         _=Depends(get_current_client)
