@@ -60,7 +60,8 @@ def health_detailed(
         result["status"] = "unhealthy"
 
     # WebSocket
-    result["checks"]["websocket"] = f"active_connections: {ws_manager.connection_count}"
+    total_connections = sum(len(conns) for conns in ws_manager.subscriptions.values())
+    result["checks"]["websocket"] = f"active_connections: {total_connections}"
 
     if result["status"] == "unhealthy":
         raise HTTPException(
