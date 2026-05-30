@@ -52,7 +52,7 @@
 
 ```bash
 # Клонировать репозиторий
-git clone https://github.com/Anna1327/space-mission-monitoring.git
+git clone https://github.com/Anna1327/space_mission_monitoring.git
 cd space-mission-monitoring
 
 # Запустить контейнеры
@@ -80,7 +80,8 @@ ReDoc: http://localhost:8000/redoc
 |-------|----------|----------|
 | GET | `/api/v1/systems/` | Список систем (пагинация, сортировка, фильтрация) |
 | GET | `/api/v1/systems/{id}` | Получить систему по ID |
-| POST | `/api/v1/systems/` | Создать систему (rate limit: 5/мин) |
+| DELETE | `/api/v1/systems/{id}` | Удалить систему по ID |
+| POST | `/api/v1/systems/` | Создать систему (rate limit: 50/мин) |
 | POST | `/api/v1/systems/{id}/trigger/{event}` | Триггер события (failure/warning/recover) |
 
 ### Датчики
