@@ -117,7 +117,7 @@ def get_system(
         }
     }
 )
-@limiter.limit("5/minute")
+@limiter.limit("50/minute")
 def create_system(
         request: Request,
         data: SystemCreate,
@@ -132,6 +132,33 @@ def create_system(
         )
     service = SystemService(db)
     return service.create(data)
+
+
+@router.delete(
+    "/{system_id}",
+    response_model=SystemResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        401: {"description": "Missing or invalid token"},
+        404: {"description": "System not found"},
+    },
+    summary="Удалить систему по ID",
+    description="Удаляет систему по её идентификатору."
+)
+def delete_system(
+        system_id: int,
+        db: Session = Depends(get_db),
+        _=Depends(get_current_client)
+):
+    """Удалить систему по ID"""
+    service = SystemService(db)
+    deleted_system = service.delete(system_id)
+    if not deleted_system:
+        raise HTTPException(
+            status_code=404,
+            detail=f"System with id {system_id} not found"
+        )
+    return deleted_system
 
 
 @router.post(

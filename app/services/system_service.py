@@ -43,6 +43,14 @@ class SystemService:
         self.db.refresh(db_system)
         return db_system
 
+    def delete(self, system_id: int):
+        system = self.get_by_id(system_id)
+        if system:
+            self.db.delete(system)
+            self.db.commit()
+            return system
+        return None
+
     def update_status(self, system_id: int, status: str):
         system = self.get_by_id(system_id)
         if system:
