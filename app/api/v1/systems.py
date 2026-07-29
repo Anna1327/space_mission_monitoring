@@ -117,7 +117,7 @@ def get_system(
         }
     }
 )
-@limiter.limit("50/minute")
+@limiter.limit("100/minute")
 def create_system(
         request: Request,
         data: SystemCreate,
