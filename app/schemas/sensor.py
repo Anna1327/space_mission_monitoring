@@ -8,6 +8,7 @@ class SensorBase(BaseModel):
     unit: str = "celsius"
     min_normal: float
     max_normal: float
+    value: float = 0.0
 
 
 class SensorCreate(SensorBase):
