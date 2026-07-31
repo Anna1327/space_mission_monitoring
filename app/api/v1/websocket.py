@@ -7,6 +7,9 @@ router = APIRouter(tags=["websocket"])
 
 @router.websocket("/ws/{system_id}")
 async def websocket_endpoint(websocket: WebSocket, system_id: int):
+    """
+    Асинхронный эндпоинт WebSocket для мониторинга космической системы в реальном времени.
+    """
     await websocket.accept()
     await ws_manager.subscribe(system_id, websocket)
     try:
@@ -23,6 +26,10 @@ async def websocket_endpoint(websocket: WebSocket, system_id: int):
                 else:
                     await websocket.send_text(json.dumps({"error": f"Unknown command: {command}"}))
             except json.JSONDecodeError:
-                await websocket.send_text(f"Echo: {data}")
+
+                await websocket.send_text(json.dumps({
+                    "error": "Invalid JSON format",
+                    "received_raw_data": data
+                }))
     except WebSocketDisconnect:
         await ws_manager.unsubscribe(system_id, websocket)

@@ -1,6 +1,6 @@
 from fastapi import status, APIRouter, Depends, HTTPException, Query, Request
 from app.core.limiter import limiter
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from ...core.database import get_db
 from ...services.system_service import SystemService
@@ -19,46 +19,29 @@ router = APIRouter(prefix="/systems", tags=["systems"])
     },
     summary="Получить список систем",
     description="""
-    Возвращает список всех систем с поддержкой пагинации, сортировки и фильтрации.
-
-    **Параметры пагинации:**
-    - `skip` — сколько пропустить
-    - `limit` — сколько взять (максимум 1000)
-
-    **Сортировка:**
-    - `sort_by` — поле для сортировки (id, name, status, created_at)
-    - `order` — направление (asc, desc)
-
-    **Фильтрация:**
-    - `status_filter` — фильтр по статусу (active, warning, failed)
-
-    **Примеры запросов:**
-    - `/systems?skip=10&limit=5` — вторая страница из 5 элементов
-    - `/systems?sort_by=name&order=desc` — сортировка по имени (убывание)
-    - `/systems?status_filter=active` — только активные системы
+    Возвращает список всех систем с поддержкой пагинации, сортировки и фильтрации (асинхронно).
     """,
     openapi_extra={
         "x-code-samples": [
             {
                 "lang": "curl",
-                "source": "curl -X GET 'http://localhost:8000/api/v1/systems?skip=10&limit=5' -H 'Authorization: "
-                          "Bearer <token>'"
+                "source": "curl -X GET 'http://localhost:8000/api/v1/systems?skip=10&limit=5' -H 'Authorization: Bearer <token>'"
             }
         ]
     }
 )
-def get_systems(
-    skip: int = Query(0, ge=0, description="Сколько пропустить", example=10),
-    limit: int = Query(100, ge=1, le=1000, description="Сколько взять (max 1000)", example=50),
-    sort_by: str = Query("id", description="Поле для сортировки (id, name, status, created_at)", example="created_at"),
-    order: str = Query("asc", description="Порядок сортировки (asc, desc)", example="desc"),
-    status_filter: str = Query(None, description="Фильтр по статусу (active, warning, failed)", example="active"),
-    db: Session = Depends(get_db),
+async def get_systems(
+    skip: int = Query(0, ge=0, description="Сколько пропустить", examples=[10]),
+    limit: int = Query(100, ge=1, le=1000, description="Сколько взять (max 1000)", examples=[50]),
+    sort_by: str = Query("id", description="Поле для сортировки (id, name, status, created_at)", examples=["created_at"]),
+    order: str = Query("asc", description="Порядок сортировки (asc, desc)", examples=["desc"]),
+    status_filter: str = Query(None, description="Фильтр по статусу (active, warning, failed)", examples=["active"]),
+    db: AsyncSession = Depends(get_db),
     _=Depends(get_current_client)
 ):
     """Получить список всех систем (с пагинацией, сортировкой и фильтрацией)"""
     service = SystemService(db)
-    return service.get_all(
+    return await service.get_all(
         skip=skip,
         limit=limit,
         sort_by=sort_by,
@@ -78,14 +61,14 @@ def get_systems(
     summary="Получить систему по ID",
     description="Возвращает полную информацию о системе по её идентификатору."
 )
-def get_system(
+async def get_system(
         system_id: int,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         _=Depends(get_current_client)
 ):
     """Получить систему по ID"""
     service = SystemService(db)
-    system = service.get_by_id(system_id)
+    system = await service.get_by_id(system_id)
     if not system:
         raise HTTPException(
             status_code=404,
@@ -118,10 +101,10 @@ def get_system(
     }
 )
 @limiter.limit("100/minute")
-def create_system(
+async def create_system(
         request: Request,
         data: SystemCreate,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         _=Depends(get_current_client)
 ):
     """Создать новую систему (двигатель, жизнеобеспечение, связь)"""
@@ -131,7 +114,7 @@ def create_system(
             detail="name and system_type are required"
         )
     service = SystemService(db)
-    return service.create(data)
+    return await service.create(data)
 
 
 @router.delete(
@@ -145,14 +128,14 @@ def create_system(
     summary="Удалить систему по ID",
     description="Удаляет систему по её идентификатору."
 )
-def delete_system(
+async def delete_system(
         system_id: int,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         _=Depends(get_current_client)
 ):
     """Удалить систему по ID"""
     service = SystemService(db)
-    deleted_system = service.delete(system_id)
+    deleted_system = await service.delete(system_id)
     if not deleted_system:
         raise HTTPException(
             status_code=404,
@@ -172,31 +155,17 @@ def delete_system(
     },
     summary="Симулировать событие системы",
     description="""
-    Симулирует событие на системе.
-
-    **Поддерживаемые типы событий:**
-    - `failure` — отказ системы (статус → failed)
-    - `warning` — предупреждение (статус → warning)
-    - `recover` — восстановление (статус → active)
-
-    **Примеры:**
-    - `/systems/1/trigger/failure` — отказ системы №1
-    - `/systems/2/trigger/recover` — восстановление системы №2
+    Симулирует событие на системе асинхронно.
     """
 )
 async def trigger_event(
         system_id: int,
         event_type: str,
-        db: Session = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         _=Depends(get_current_client)
 ):
     """
     Симулировать событие системы
-
-    Поддерживаемые event_type:
-    - failure (отказ)
-    - warning (предупреждение)
-    - recover (восстановление)
     """
     valid_events = ["failure", "warning", "recover"]
     if event_type not in valid_events:
@@ -206,7 +175,7 @@ async def trigger_event(
         )
 
     service = SystemService(db)
-    system = service.get_by_id(system_id)
+    system = await service.get_by_id(system_id)
     if not system:
         raise HTTPException(
             status_code=404,
@@ -214,11 +183,11 @@ async def trigger_event(
         )
 
     if event_type == "failure":
-        system = service.update_status(system_id, "failed")
+        system = await service.update_status(system_id, "failed")
     elif event_type == "warning":
-        system = service.update_status(system_id, "warning")
+        system = await service.update_status(system_id, "warning")
     elif event_type == "recover":
-        system = service.update_status(system_id, "active")
+        system = await service.update_status(system_id, "active")
 
     event_data = {
         "system_id": system_id,
@@ -228,9 +197,9 @@ async def trigger_event(
         "old_status": system.status,
         "new_status": system.status if event_type == "recover" else event_type
     }
-    service.add_event(system_id, event_data)
 
-    # broadcast via WebSocket
+    await service.add_event(system_id, event_data)
+
     from ...utils.websocket_manager import ws_manager
     await ws_manager.broadcast_to_system(system_id, event_data)
     return {"status": "triggered", "event": event_data}
