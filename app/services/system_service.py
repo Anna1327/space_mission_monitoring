@@ -1,13 +1,18 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import insert
+
+from ..models.event import Event
 from ..models.system import System
 from ..schemas.system import SystemCreate
 
 
 class SystemService:
-    def __init__(self, db: Session):
+    def __init__(self, db: AsyncSession):
         self.db = db
 
-    def get_all(
+    async def get_all(
             self,
             skip: int = 0,
             limit: int = 100,
@@ -15,56 +20,76 @@ class SystemService:
             order: str = "asc",
             status_filter=None
     ):
-        query = self.db.query(System)
+        """Асинхронное получение систем с динамической сортировкой, фильтрацией и пагинацией"""
+        query = select(System)
 
-        # Фильтр по статусу
         if status_filter:
             query = query.filter(System.status == status_filter)
 
-        # Сортировка
         if order == "asc":
             query = query.order_by(getattr(System, sort_by).asc())
         else:
             query = query.order_by(getattr(System, sort_by).desc())
 
-        # Пагинация
-        return query.offset(skip).limit(limit).all()
+        query = query.offset(skip).limit(limit)
 
-    def get_by_id(self, system_id: int):
-        return self.db.query(System).filter(System.id == system_id).first()
+        result = await self.db.execute(query)
+        return result.scalars().all()
 
-    def create(self, data: SystemCreate):
+    async def get_by_id(self, system_id: int):
+        """Асинхронный поиск космической системы по её ID"""
+        query = select(System).filter(System.id == system_id)
+        result = await self.db.execute(query)
+        return result.scalars().first()
+
+    async def create(self, data: SystemCreate):
+        """Асинхронное создание новой системы космического корабля"""
         db_system = System(
             name=data.name,
             system_type=data.system_type
         )
         self.db.add(db_system)
-        self.db.commit()
-        self.db.refresh(db_system)
+        await self.db.commit()
+        await self.db.refresh(db_system)
         return db_system
 
-    def delete(self, system_id: int):
-        system = self.get_by_id(system_id)
+    async def delete(self, system_id: int):
+        """Асинхронное удаление системы из реестра"""
+        system = await self.get_by_id(system_id)
         if system:
-            self.db.delete(system)
-            self.db.commit()
+            delete_events_query = sql_delete(Event).where(Event.system_id == system_id)
+            await self.db.execute(delete_events_query)
+
+            query = sql_delete(System).where(System.id == system_id)
+            await self.db.execute(query)
+
+            await self.db.commit()
             return system
         return None
 
-    def update_status(self, system_id: int, status: str):
-        system = self.get_by_id(system_id)
+    async def update_status(self, system_id: int, status: str):
+        """Асинхронное обновление статуса системы (stable / warning / failure)"""
+        system = await self.get_by_id(system_id)
         if system:
             system.status = status
-            self.db.commit()
-            self.db.refresh(system)
+            await self.db.commit()
+            await self.db.refresh(system)
         return system
 
-    def add_event(self, system_id: int, event_data: dict):
-        system = self.get_by_id(system_id)
+    async def add_event(self, system_id: int, event_data: dict):
+        """Асинхронное добавление ивента в историю логов системы"""
+        system = await self.get_by_id(system_id)
         if system:
-            events = system.events or []
+            events = list(system.events or [])
             events.append(event_data)
             system.events = events
-            self.db.commit()
-            self.db.refresh(system)
+
+            event_insert_query = insert(Event).values(
+                system_id=system_id,
+                event_type=event_data["event"],
+                payload=event_data
+            )
+            await self.db.execute(event_insert_query)
+            await self.db.commit()
+            await self.db.refresh(system)
         return system
