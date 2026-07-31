@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.core.limiter import limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from .core.config import settings
@@ -7,12 +8,18 @@ from app.api.health import router as health_router
 from .api.v1.router import router as api_v1_router
 from app.core.database import engine, Base
 
-Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
 
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
+    lifespan=lifespan
 )
 
 app.state.limiter = limiter
@@ -31,7 +38,7 @@ app.include_router(api_v1_router)
 
 
 @app.get("/")
-def root():
+async def root():
     return {
         "mission": settings.APP_NAME,
         "status": "operational",
@@ -44,5 +51,5 @@ def root():
     summary="Быстрая проверка здоровья",
     description="Возвращает базовый статус сервиса. Используется для балансировщиков и оркестраторов."
 )
-def health():
+async def health():
     return {"status": "healthy"}

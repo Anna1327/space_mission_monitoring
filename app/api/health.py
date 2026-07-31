@@ -1,8 +1,8 @@
 from fastapi import status, APIRouter, Depends, HTTPException
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from redis import Redis
+import redis.asyncio as aioredis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from app.core.database import get_db
 from app.core.config import settings
@@ -12,8 +12,12 @@ from app.schemas.health import HealthResponse
 router = APIRouter(tags=["health"])
 
 
-def get_redis():
-    return Redis.from_url(settings.REDIS_URL)
+async def get_redis():
+    client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+    try:
+        yield client
+    finally:
+        await client.close()
 
 
 @router.get(
@@ -24,42 +28,28 @@ def get_redis():
         503: {"description": "Service unhealthy (database or redis down)"}
     },
     summary="Детальная проверка здоровья",
-    description="""
-    Проверяет состояние всех компонентов системы:
-    - **database** — подключение к PostgreSQL
-    - **redis** — доступность Redis
-    - **websocket** — количество активных соединений
-
-    Если хотя бы один компонент не работает, возвращает HTTP 503.
-    """
+    description="Проверяет асинхронное состояние всех компонентов системы."
 )
-def health_detailed(
-        db: Session = Depends(get_db),
-        redis: Redis = Depends(get_redis)
+async def health_detailed(
+        db: AsyncSession = Depends(get_db),
+        redis: aioredis.Redis = Depends(get_redis)
 ):
-    """
-        Детальная проверка состояния сервиса
-        Возвращает статус каждого компонента (database, redis, websocket)
-    """
     result = {"status": "healthy", "checks": {}}
 
-    # Проверка БД
     try:
-        db.execute(text("SELECT 1"))
+        await db.execute(text("SELECT 1"))
         result["checks"]["database"] = "connected"
     except SQLAlchemyError as e:
         result["checks"]["database"] = f"failed: {str(e)}"
         result["status"] = "unhealthy"
 
-    # Проверка Redis
     try:
-        redis.ping()
+        await redis.ping()
         result["checks"]["redis"] = "connected"
     except RedisConnectionError as e:
         result["checks"]["redis"] = f"failed: {str(e)}"
         result["status"] = "unhealthy"
 
-    # WebSocket
     total_connections = sum(len(conns) for conns in ws_manager.subscriptions.values())
     result["checks"]["websocket"] = f"active_connections: {total_connections}"
 

@@ -1,21 +1,21 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.database import get_db
 from ..services.auth_service import AuthService
 
 security = HTTPBearer(auto_error=False)
 
 
-def get_current_client(
+async def get_current_client(
         credentials: HTTPAuthorizationCredentials = Depends(security),
-        db: Session = Depends(get_db)
+        db: AsyncSession = Depends(get_db)
 ):
     """
-        Получить текущего клиента из JWT токена.
+    Получить текущего клиента из JWT токена (полностью асинхронно).
 
-        Возможные ошибки:
-        - 401: Токен не предоставлен|Токен невалидный или истёк
+    Возможные ошибки:
+    - 401: Токен не предоставлен | Токен невалидный или истёк
     """
     if not credentials:
         raise HTTPException(
@@ -26,7 +26,8 @@ def get_current_client(
 
     token = credentials.credentials
     auth_service = AuthService(db)
-    client = auth_service.get_client_from_token(token)
+
+    client = await auth_service.get_client_from_token(token)
 
     if not client:
         raise HTTPException(
